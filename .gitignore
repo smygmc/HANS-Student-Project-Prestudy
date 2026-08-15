@@ -1,0 +1,8 @@
+# Large model weights
+*.pt
+yolov8n.pt
+
+# Python cache & virtual environment artifacts
+__pycache__/
+*.pyc
+.vscode/
