@@ -39,39 +39,37 @@ class HandTracker:
                     hand_landmarks, #detected 21 hand keypoints
                     self.mp_hands.HAND_CONNECTIONS #connections mapping between fingers
                 )
+
+        #draw center
+        cx, cy = self.get_hand_center(frame)
+        cv2.circle(frame, (cx, cy), 12, (0, 255, 0), cv2.FILLED)
+        cv2.putText(
+            frame,
+            f"Center: ({cx}, {cy})",
+            (cx + 15, cy - 10),
+            cv2.FONT_HERSHEY_SIMPLEX,
+            0.6,
+            (0, 255, 0),
+            2,
+        )
         return frame
 
-    def get_hand_center(self,frame=None, format=0):
+    def get_hand_center(self,frame=None):
         """
-        pixel coodinates of trhe hand center
-        format {
-        0=pixel
-        1=normalized
-        2=world_metric        
-        }
+        pixel coodinates of the hand center
+       
         """
 
-        if not self.results or not self.results.multi_hand_landmarks: #if any hand landmarks are detected
+        if frame is None or not self.results or not self.results.multi_hand_landmarks: #if any hand landmarks are detected
            return None
 
         landmark_2d = self.results.multi_hand_landmarks[0].landmark[9]
 
-        if format==1:
-            return round(landmark_2d.x,4), round(landmark_2d.y,4) #normalized coordinates
+        height, width, _ = frame.shape
+        cx= int(landmark_2d.x * width)
+        cy= int(landmark_2d.y * height)
+        return cx,cy
 
-        elif format==0:
-            if frame is None:
-                return None
-            height, width, _ = frame.shape
-            cx= int(landmark_2d.x * width)
-            cy= int(landmark_2d.y * height)
-            return cx,cy
-
-        elif format==2:
-            if self.results.multi_hand_world_landmarks:
-                landmark_3d = self.results.multi_hand_world_landmarks[0].landmark[9]
-                return round(landmark_3d.x,4), round(landmark_3d.y,4), round(landmark_3d.z,4) #world metric coordinates
-            return None
 
     
 

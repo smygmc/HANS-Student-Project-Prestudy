@@ -30,7 +30,7 @@ def main():
 
         hand_tracker.process_frame(frame)
         # Retrieve palm center coordinates in pixels
-        hand_center = hand_tracker.get_hand_center(frame, format=0)
+        hand_center = hand_tracker.get_hand_center(frame)
 
         if frame_count % 5 == 0:
             object_detector.process_frame(frame)
@@ -42,29 +42,9 @@ def main():
             hand_center, target_center
         )
 
-        frame = hand_tracker.draw_landmarks(frame)
+        if hand_center is not None:
+            frame = hand_tracker.draw_landmarks(frame)
 
-        # Highlight the center point and overlay coordinates
-        
-        if hand_center:
-            
-            cx, cy = hand_center
-
-            # green
-            cv2.circle(frame, (cx, cy), 12, (0, 255, 0), cv2.FILLED)
-
-            # coordinate text
-            cv2.putText(
-                frame,
-                f"Center: ({cx}, {cy})",
-                (cx + 15, cy - 10),
-                cv2.FONT_HERSHEY_SIMPLEX,
-                0.6,
-                (0, 255, 0),
-                2,
-            )
-
-        
         if target_box and target_center:
             frame = object_detector.draw_target(frame, target_box, target_center)
 
