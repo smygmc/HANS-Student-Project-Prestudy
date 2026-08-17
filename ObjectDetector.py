@@ -26,7 +26,7 @@ class ObjectDetector:
         :param frame: The BGR image frame from OpenCV.
         :return: Ultralytics Results object.
         """
-        self.results = self.model(frame, conf=self.conf_threshold, verbose=False)[0]  # Perform object detection on the frame
+        self.results = self.model(frame, conf=self.conf_threshold,imgsz=320,verbose=False)[0]  # Perform object detection on the frame
         return self.results
 
     def get_target_box_and_center(self):

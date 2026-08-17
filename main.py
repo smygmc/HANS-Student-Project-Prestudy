@@ -1,17 +1,21 @@
 import cv2
+import config
 from HandTracker import HandTracker
 from ObjectDetector import ObjectDetector
+from GuidanceController import GuidanceController
 
 def main():
-    camera_source = "http://192.168.1.196:8080/video"
-
-    cap = cv2.VideoCapture(camera_source)
+    
+    cap = cv2.VideoCapture(config.CAMERA_SOURCE)
     
     #create handtracker object
     hand_tracker = HandTracker()
-    object_detector = ObjectDetector(model_name="yolov8n.pt", target_label="bottle", conf_threshold=0.5)
+    object_detector = ObjectDetector(model_name="yolov8n.pt", target_label="bottle", conf_threshold=0.2)
+    guidance_controller = GuidanceController(tolerance_radius=45)
+
     print("HANS Pipeline running... Press 'q' to quit.")
 
+    frame_count = 0#video stream is so slow ehwn yolo processes every frame
     while cap.isOpened():
         #read asingle frame from the video stream
         # ret is boolean, if the frame was read successfully
@@ -21,12 +25,23 @@ def main():
         if not ret:
             print("failed to grab frame from camera")
             break
-
-        frame=cv2.flip(frame,1) #camera will be in front of me (not first person view) so adding mirror effect to be more intuitive
+        frame_count += 1
+        #frame=cv2.flip(frame,1) #camera will be in front of me (not first person view) so adding mirror effect to be more intuitive
 
         hand_tracker.process_frame(frame)
         # Retrieve palm center coordinates in pixels
         hand_center = hand_tracker.get_hand_center(frame, format=0)
+
+        if frame_count % 5 == 0:
+            object_detector.process_frame(frame)
+        
+
+        target_box, target_center = object_detector.get_target_box_and_center()
+        
+        guidance_data = guidance_controller.compute_guidance(
+            hand_center, target_center
+        )
+
         frame = hand_tracker.draw_landmarks(frame)
 
         # Highlight the center point and overlay coordinates
@@ -49,11 +64,15 @@ def main():
                 2,
             )
 
-        object_detector.process_frame(frame)
-        target_box, target_center = object_detector.get_target_box_and_center()
-
+        
         if target_box and target_center:
             frame = object_detector.draw_target(frame, target_box, target_center)
+
+        # Draw 2D trajectory arrow and navigation commands
+        if guidance_data:
+            guidance_controller.draw_guidance(
+                frame, hand_center, target_center, guidance_data
+            )
 
         #display the final processed frame
         cv2.imshow("hans step 1: hand tracking",frame)
