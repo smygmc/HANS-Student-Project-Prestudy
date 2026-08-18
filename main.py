@@ -3,6 +3,7 @@ import config
 from HandTracker import HandTracker
 from ObjectDetector import ObjectDetector
 from GuidanceController import GuidanceController
+import numpy as np
 
 def main():
     
@@ -11,11 +12,13 @@ def main():
     #create handtracker object
     hand_tracker = HandTracker()
     object_detector = ObjectDetector(model_name="yolov8n.pt", target_label="bottle", conf_threshold=0.2)
-    guidance_controller = GuidanceController(tolerance_radius=45)
+    guidance_controller = GuidanceController(tolerance_radius=75, z_tolerance=60.0)
+    
 
     print("HANS Pipeline running... Press 'q' to quit.")
 
     frame_count = 0#video stream is so slow ehwn yolo processes every frame
+    depth_map = None
     while cap.isOpened():
         #read asingle frame from the video stream
         # ret is boolean, if the frame was read successfully
@@ -28,6 +31,7 @@ def main():
         frame_count += 1
         #frame=cv2.flip(frame,1) #camera will be in front of me (not first person view) so adding mirror effect to be more intuitive
 
+
         hand_tracker.process_frame(frame)
         # Retrieve palm center coordinates in pixels
         hand_center = hand_tracker.get_hand_center(frame)
@@ -38,8 +42,12 @@ def main():
 
         target_box, target_center = object_detector.get_target_box_and_center()
         
+        if frame_count % 7 == 0 or depth_map is None:
+            depth_map = guidance_controller.estimate_scene_depth(frame)
+
+        # 3. [GÜNCELLENDİ] 3D Yönlendirmeyi Hesapla (depth_map parametresi eklendi)
         guidance_data = guidance_controller.compute_guidance(
-            hand_center, target_center
+            hand_center, target_center, depth_map=depth_map
         )
 
         if hand_center is not None:

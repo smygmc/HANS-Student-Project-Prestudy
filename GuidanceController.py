@@ -1,19 +1,30 @@
 import math
 import cv2
-
+from DepthEstimator import DepthEstimator
 
 class GuidanceController:
     """
-    Computes 2D spatial guidance metrics between the hand center and target object.
+    Computes 3D spatial guidance metrics between the hand center and target object.
     """
 
-    def __init__(self, tolerance_radius=45):
+    def __init__(self, tolerance_radius=45,z_tolerance=20.0,model_type="MiDaS_small",):
         
+        # 2D pixel tolerance
         self.tolerance_radius = tolerance_radius
+        # 3D depth tolerance
+        self.z_tolerance = z_tolerance
+        # Embedded depth estimation model
+        self.depth_estimator = DepthEstimator(model_type=model_type)
 
-    def compute_guidance(self, hand_center, target_center):
+    def estimate_scene_depth(self, frame):
+        """Generates raw depth map and colored heatmap for visualization."""
+        depth_map = self.depth_estimator.estimate_depth(frame)
+        
+        return depth_map
+    
+    def compute_guidance(self, hand_center, target_center, depth_map=None):
         """
-        Calculates distance, delta vector, and navigation command.
+        Calculates 3D euclidian distance, delta vector, and navigation command.
         
         """
         if hand_center is None or target_center is None:
@@ -26,25 +37,50 @@ class GuidanceController:
         dx = tx - hx
         dy = ty - hy
 
-        # Euclidean distance-distance
-        distance = math.sqrt(dx**2 + dy**2)
+        # Depth (Z) extraction and delta
+        hand_z = None
+        target_z = None
+        dz = 0.0
 
+        if depth_map is not None:
+            hand_z = self.depth_estimator.get_depth_at_point(depth_map, (hx, hy))
+            target_z = self.depth_estimator.get_depth_at_point(depth_map, (tx, ty))
+            if hand_z is not None and target_z is not None:
+                dz = target_z - hand_z
+
+        # Euclidean distance-distance
+        distance_2d = math.sqrt(dx**2 + dy**2)
+        distance_3d = math.sqrt(dx**2 + dy**2 + dz**2)
+
+        # Check if hand is within tolerance threshold on all axes
+        is_2d_reached = distance_2d <= self.tolerance_radius
+        is_z_reached = abs(dz) <= self.z_tolerance
         # Check if hand is within tolerance threshold
-        if distance <= self.tolerance_radius:
+        if is_2d_reached and is_z_reached:
             direction_command = "REACHED"
         else:
             # Determine dominant direction axis to give only one direction command at a time
-            if abs(dx) > abs(dy):
+            abs_dx = abs(dx)
+            abs_dy = abs(dy)
+            abs_dz = abs(dz)
+            
+            if abs_dz > abs_dx and abs_dz > abs_dy and not is_z_reached:
+                #near objects > far objects
+                direction_command = "FORWARD" if dz < 0 else "BACKWARD"
+            elif abs(dx) > abs(dy):
                 # dx>0 target on the right
                 direction_command = "RIGHT" if dx > 0 else "LEFT"
             else:
                 # dy>0 target is below
                 direction_command = "DOWN" if dy > 0 else "UP"
+            
 
         return {
             "dx": dx,
             "dy": dy,
-            "distance": round(distance, 2),
+            "dz": dz,
+            "distance": round(distance_3d, 2),
+            "distance_2d": round(distance_2d, 2),
             "command": direction_command,
         }
 
@@ -63,7 +99,10 @@ class GuidanceController:
         tx, ty = target_center
         distance = guidance_data["distance"]
         command = guidance_data["command"]
+        dz = guidance_data["dz"]
+        
 
+        
         if command == "REACHED":
             # Highlight target reached with green circle and text
             cv2.circle(frame, (tx, ty), self.tolerance_radius, (0, 255, 0), 2)
@@ -92,10 +131,10 @@ class GuidanceController:
                 frame, (tx, ty), self.tolerance_radius, (255, 255, 0), 1
             )
 
-            # Overlay navigation guidance command
+            # Overlay navigation guidance command with dZ info
             cv2.putText(
                 frame,
-                f"ACTION: {command} | DIST: {int(distance)}px",
+                f"ACTION: {command} | DIST: {int(distance)} | dZ: {dz}",
                 (30, 50),
                 cv2.FONT_HERSHEY_SIMPLEX,
                 0.75,
